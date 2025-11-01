@@ -1,0 +1,132 @@
+# Configuración General del Pipeline ETL/ELT
+
+project:
+  name: "Olist E-commerce Data Warehouse"
+  version: "1.0.0"
+  author: "Alejandro"
+
+paths:
+  raw_data: "data/raw"
+  staging: "data/staging"
+  processed: "data/processed"
+  logs: "logs"
+
+# Configuración de bases de datos
+databases:
+  oltp:
+    type: "postgresql"
+    host: "${POSTGRES_HOST}"
+    port: 5432
+    database: "${OLTP_DB}"
+    user: "${POSTGRES_USER}"
+    password: "${POSTGRES_PASSWORD}"
+  
+  dwh:
+    type: "postgresql"
+    host: "${POSTGRES_HOST}"
+    port: 5432
+    database: "${DWH_DB}"
+    user: "${POSTGRES_USER}"
+    password: "${POSTGRES_PASSWORD}"
+
+# Configuración de Data Lake
+data_lake:
+  type: "local"  # local, s3, gcs
+  local:
+    path: "./data/staging"
+  s3:
+    bucket: "${S3_BUCKET}"
+    region: "${S3_REGION}"
+  gcs:
+    bucket: "${GCS_BUCKET}"
+    project_id: "${GCP_PROJECT_ID}"
+
+# Configuración de archivos CSV de origen
+source_files:
+  customers: "olist_customers_dataset.csv"
+  orders: "olist_orders_dataset.csv"
+  order_items: "olist_order_items_dataset.csv"
+  order_payments: "olist_order_payments_dataset.csv"
+  order_reviews: "olist_order_reviews_dataset.csv"
+  products: "olist_products_dataset.csv"
+  sellers: "olist_sellers_dataset.csv"
+  geolocation: "olist_geolocation_dataset.csv"
+  product_translation: "product_category_name_translation.csv"
+
+# Configuración de transformaciones
+transformations:
+  date_format: "%Y-%m-%d %H:%M:%S"
+  null_handling: "drop"  # drop, fill, flag
+  decimal_places: 2
+
+# Configuración de dimensiones
+dimensions:
+  - name: "dim_customers"
+    source_table: "customers"
+    key: "customer_id"
+  
+  - name: "dim_products"
+    source_table: "products"
+    key: "product_id"
+  
+  - name: "dim_sellers"
+    source_table: "sellers"
+    key: "seller_id"
+  
+  - name: "dim_geolocation"
+    source_table: "geolocation"
+    key: "geolocation_zip_code_prefix"
+  
+  - name: "dim_date"
+    source_table: "orders"
+    date_column: "order_purchase_timestamp"
+
+# Configuración de tabla de hechos
+fact_table:
+  name: "fct_orders"
+  grain: "order_item"
+  measures:
+    - price
+    - freight_value
+    - payment_value
+  
+# Configuración de Airflow
+airflow:
+  dag_id: "olist_etl_pipeline"
+  schedule: "@daily"
+  start_date: "2024-01-01"
+  catchup: false
+  max_active_runs: 1
+  
+# Métricas de negocio
+business_metrics:
+  - name: "total_revenue"
+    query: "SUM(price)"
+  
+  - name: "avg_delivery_time"
+    query: "AVG(JULIANDAY(order_delivered_customer_date) - JULIANDAY(order_purchase_timestamp))"
+  
+  - name: "customer_lifetime_value"
+    query: "SUM(price) GROUP BY customer_unique_id"
+
+# Configuración de calidad de datos
+data_quality:
+  enabled: true
+  checks:
+    - table: "fct_orders"
+      column: "order_id"
+      test: "not_null"
+    
+    - table: "fct_orders"
+      column: "price"
+      test: "positive"
+    
+    - table: "dim_customers"
+      column: "customer_id"
+      test: "unique"
+
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "./logs/pipeline.log"
