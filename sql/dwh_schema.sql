@@ -82,8 +82,8 @@ CREATE INDEX idx_dim_sellers_state ON dim_sellers(seller_state);
 CREATE TABLE IF NOT EXISTS dim_geolocation (
     geolocation_key SERIAL PRIMARY KEY,
     geolocation_zip_code_prefix VARCHAR(10),
-    geolocation_lat DECIMAL(10, 8),
-    geolocation_lng DECIMAL(10, 8),
+    geolocation_lat DECIMAL(11, 8),
+    geolocation_lng DECIMAL(11, 8),
     geolocation_city VARCHAR(100),
     geolocation_state CHAR(2),
     geolocation_region VARCHAR(20),

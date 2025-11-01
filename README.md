@@ -1,153 +1,132 @@
-# Data Warehouse para Análisis de E-commerce - Olist Dataset
+# Pipeline de Extracción - Olist E-commerce Dataset
 
 ## Descripción del Proyecto
 
-Este proyecto implementa un pipeline ETL/ELT completo para construir un Data Warehouse con modelo en estrella, utilizando el dataset de Olist (e-commerce brasileño).
+Este proyecto implementa un pipeline de extracción para cargar datos CSV del e-commerce brasileño Olist a una base de datos PostgreSQL (OLTP).
+
+##  Fuente de Datos
+
+Los datos utilizados en este proyecto provienen del dataset público de Olist disponible en Kaggle:
+
+**[Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)**
+
+El dataset incluye información de aproximadamente 100,000 órdenes realizadas entre 2016 y 2018 en múltiples marketplaces de Brasil.
 
 ## Arquitectura del Pipeline
 
 ```
-CSV Files → PostgreSQL (OLTP) → Data Lake (Parquet) → Transformación (Spark/dbt) → Data Warehouse (OLAP)
-                                                                                          ↓
-                                                                                    BI Tools (Looker/Tableau/Power BI)
+CSV Files  PostgreSQL (OLTP)
 ```
 
 ## Estructura del Proyecto
 
 ```
 Análisis de E-commerce/
-├── config/
-│   ├── config.yaml              # Configuración general
-│   └── db_config.py             # Configuración de bases de datos
-├── data/
-│   ├── raw/                     # CSVs originales
-│   ├── staging/                 # Parquet files
-│   └── processed/               # Datos procesados
-├── scripts/
-│   ├── 01_extract/
-│   │   ├── load_csv_to_oltp.py    # Carga CSVs a PostgreSQL
-│   │   └── extract_from_oltp.py   # Extrae datos de OLTP
-│   ├── 02_staging/
-│   │   └── load_to_datalake.py    # Carga a Data Lake (Parquet)
-│   ├── 03_transform/
-│   │   ├── data_cleaning.py       # Limpieza de datos
-│   │   ├── create_dimensions.py   # Crea tablas dimensión
-│   │   └── create_fact_table.py   # Crea tabla de hechos
-│   ├── 04_load/
-│   │   └── load_to_dwh.py         # Carga al Data Warehouse
-│   └── 05_analysis/
-│       └── business_queries.py    # Queries de negocio
-├── sql/
-│   ├── oltp_schema.sql          # Schema OLTP
-│   ├── dwh_schema.sql           # Schema DWH (Star Schema)
-│   └── analysis_queries.sql     # Queries de análisis
-├── dags/
-│   └── olist_etl_dag.py         # DAG de Airflow
-├── notebooks/
-│   └── exploratory_analysis.ipynb
-├── requirements.txt
-└── README.md
+ config/
+    config.yaml              # Configuración general
+    db_config.py             # Configuración de base de datos
+ data/
+    raw/                     # CSVs originales (9 archivos)
+ scripts/
+    01_extract/
+        load_csv_to_oltp.py  # Carga CSVs a PostgreSQL
+ sql/
+    oltp_schema.sql          # Schema OLTP (9 tablas)
+ logs/                        # Logs de ejecución
+ requirements.txt
+ README.md
 ```
 
-## Modelo en Estrella
+## Tablas en Base de Datos OLTP
 
-### Tabla de Hechos (Fact Table)
-- **fct_orders**: Contiene métricas y claves foráneas a dimensiones
+El pipeline carga 9 tablas a PostgreSQL:
 
-### Tablas de Dimensiones (Dimension Tables)
-- **dim_customers**: Información de clientes
-- **dim_products**: Información de productos
-- **dim_sellers**: Información de vendedores
-- **dim_geolocation**: Información geográfica
-- **dim_date**: Dimensión de tiempo
+1. **customers** - Clientes (99,441 registros)
+2. **products** - Productos (32,951 registros)
+3. **sellers** - Vendedores (3,095 registros)
+4. **orders** - Órdenes (99,441 registros)
+5. **order_items** - Items de orden (112,650 registros)
+6. **order_payments** - Pagos (103,886 registros)
+7. **order_reviews** - Reseñas (98,410 registros)
+8. **geolocation** - Geolocalización (1,000,163 registros)
+9. **product_category_name_translation** - Traducciones (71 registros)
 
-## Instalación y Configuración
+## Instalaci�n y Configuraci�n
 
-### 1. Instalar Dependencias
+### 1. Descargar Dataset
+
+Descargar los archivos CSV desde [Kaggle - Brazilian E-Commerce](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce) y colocarlos en la carpeta `data/raw/`.
+
+### 2. Instalar Dependencias
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configurar PostgreSQL
+### 3. Configurar PostgreSQL
 
-Instalar PostgreSQL y crear las bases de datos:
+Instalar PostgreSQL y crear la base de datos:
+
 ```sql
 CREATE DATABASE olist_oltp;
-CREATE DATABASE olist_dwh;
 ```
 
-### 3. Configurar Variables de Entorno
+### 4. Configurar Variables de Entorno
 
 Crear archivo `.env`:
+
 ```
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_USER=tu_usuario
 POSTGRES_PASSWORD=tu_password
 OLTP_DB=olist_oltp
-DWH_DB=olist_dwh
 ```
 
-### 4. Configurar Apache Airflow (Opcional)
+### 5. Crear Schema
+
+Ejecutar el script SQL para crear las tablas:
 
 ```bash
-airflow db init
-airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com
+psql -U postgres -d olist_oltp -f sql/oltp_schema.sql
 ```
 
-## Ejecución del Pipeline
+## Ejecuci�n del Pipeline
 
-### Opción 1: Ejecutar paso a paso
+### Ejecutar pipeline completo
 
 ```bash
-# 1. Cargar CSVs a OLTP
-python scripts/01_extract/load_csv_to_oltp.py
-
-# 2. Extraer a Staging
-python scripts/02_staging/load_to_datalake.py
-
-# 3. Transformar datos
-python scripts/03_transform/data_cleaning.py
-python scripts/03_transform/create_dimensions.py
-python scripts/03_transform/create_fact_table.py
-
-# 4. Cargar a DWH
-python scripts/04_load/load_to_dwh.py
-
-# 5. Ejecutar análisis
-python scripts/05_analysis/business_queries.py
+python run_pipeline.py
 ```
 
-### Opción 2: Usar Airflow
-
-```bash
-# Iniciar Airflow
-airflow webserver -p 8080
-airflow scheduler
-
-# El DAG se ejecutará automáticamente según la programación
-```
-
-## Preguntas de Negocio Resueltas
-
-1. **¿Cuáles son los productos más vendidos por mes?**
-2. **¿De qué estados provienen los clientes más valiosos?**
-3. **¿Cuál es el tiempo promedio de entrega por región?**
-4. **¿Cuáles son las categorías de productos más rentables?**
-5. **¿Cuál es el comportamiento de compra de clientes recurrentes?**
+El pipeline ejecutará:
+1. Carga de 9 archivos CSV a PostgreSQL
+2. Total de ~1.6 millones de registros
+3. Tiempo estimado: 78 segundos
 
 ## Tecnologías Utilizadas
 
-- **Extracción**: Python, Pandas, SQLAlchemy
-- **Staging**: Parquet, Data Lake local/S3
-- **Transformación**: PySpark / dbt
-- **Data Warehouse**: PostgreSQL / BigQuery / Snowflake
-- **Orquestación**: Apache Airflow
-- **Visualización**: Looker Studio / Tableau / Power BI
+- **Lenguaje**: Python 3.12
+- **Base de Datos**: PostgreSQL 18
+- **Librerías principales**:
+  - pandas - Manipulación de datos
+  - SQLAlchemy - ORM y conexiones
+  - psycopg2 - Driver PostgreSQL
+  - loguru - Logging
+  - pyarrow - Lectura eficiente de CSV
+- **Formato de datos**: CSV
 
-## Notas
+## Notas Técnicas
 
-- El pipeline está diseñado para ejecutarse de forma batch (diariamente)
-- Se puede adaptar para usar servicios en la nube (AWS, GCP, Azure)
-- El modelo en estrella facilita queries analíticas eficientes
+- La tabla `geolocation` es la más grande (1M+ registros) y usa PostgreSQL COPY para carga optimizada
+- Coordenadas geográficas almacenadas con precisión DECIMAL(11,8)
+- Todas las tablas incluyen campos de auditoría (`created_at`, `updated_at`)
+- Los logs se guardan en la carpeta `logs/` para debugging
+
+## Próximos Pasos
+
+Este pipeline sirve como base para:
+- Análisis exploratorio de datos con Jupyter notebooks
+- Construcción de dashboards con herramientas BI
+- Desarrollo de modelos de Machine Learning
+- Implementación de un Data Warehouse (futuro)

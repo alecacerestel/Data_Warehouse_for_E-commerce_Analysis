@@ -13,7 +13,7 @@ from loguru import logger
 # Agregar el directorio raíz al path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from config.db_config import DatabaseConfig, load_config
+from config.db_config import DatabaseConfig
 
 # Configurar logging
 logger.add("logs/01_load_csv_to_oltp.log", rotation="1 MB", level="INFO")
@@ -26,7 +26,6 @@ class CSVToOLTPLoader:
         self.db_config = DatabaseConfig()
         self.engine = self.db_config.get_oltp_engine()
         self.data_path = Path(data_path)
-        self.config = load_config()
         
     def create_schema(self):
         """Crear schema de OLTP si no existe"""
@@ -57,7 +56,7 @@ class CSVToOLTPLoader:
         """Cargar datos de clientes"""
         logger.info("Cargando datos de clientes...")
         
-        file_path = self.data_path / self.config['source_files']['customers']
+        file_path = self.data_path / "olist_customers_dataset.csv"
         df = pd.read_csv(file_path, encoding='utf-8')
         
         # Eliminar duplicados basados en customer_id (primary key)
@@ -70,7 +69,7 @@ class CSVToOLTPLoader:
         logger.info(f"Registros encontrados: {len(df)}")
         
         # Cargar a la base de datos
-        df.to_sql('customers', self.engine, if_exists='append', index=False, method='multi', chunksize=1000)
+        df.to_sql('customers', self.engine, if_exists='append', index=False, method=None, chunksize=1000)
         
         logger.success(f"✓ {len(df)} clientes cargados exitosamente")
         return len(df)
@@ -79,12 +78,12 @@ class CSVToOLTPLoader:
         """Cargar datos de productos"""
         logger.info("Cargando datos de productos...")
         
-        file_path = self.data_path / self.config['source_files']['products']
+        file_path = self.data_path / "olist_products_dataset.csv"
         df = pd.read_csv(file_path, encoding='utf-8')
         
         logger.info(f"Registros encontrados: {len(df)}")
         
-        df.to_sql('products', self.engine, if_exists='append', index=False, method='multi', chunksize=1000)
+        df.to_sql('products', self.engine, if_exists='append', index=False, method=None, chunksize=1000)
         
         logger.success(f"✓ {len(df)} productos cargados exitosamente")
         return len(df)
@@ -93,12 +92,12 @@ class CSVToOLTPLoader:
         """Cargar datos de vendedores"""
         logger.info("Cargando datos de vendedores...")
         
-        file_path = self.data_path / self.config['source_files']['sellers']
+        file_path = self.data_path / "olist_sellers_dataset.csv"
         df = pd.read_csv(file_path, encoding='utf-8')
         
         logger.info(f"Registros encontrados: {len(df)}")
         
-        df.to_sql('sellers', self.engine, if_exists='append', index=False, method='multi', chunksize=1000)
+        df.to_sql('sellers', self.engine, if_exists='append', index=False, method=None, chunksize=1000)
         
         logger.success(f"✓ {len(df)} vendedores cargados exitosamente")
         return len(df)
@@ -107,7 +106,7 @@ class CSVToOLTPLoader:
         """Cargar datos de órdenes"""
         logger.info("Cargando datos de órdenes...")
         
-        file_path = self.data_path / self.config['source_files']['orders']
+        file_path = self.data_path / "olist_orders_dataset.csv"
         df = pd.read_csv(file_path, encoding='utf-8')
         
         # Convertir columnas de fecha
@@ -126,7 +125,7 @@ class CSVToOLTPLoader:
         
         logger.info(f"Registros encontrados: {len(df)}")
         
-        df.to_sql('orders', self.engine, if_exists='append', index=False, method='multi', chunksize=1000)
+        df.to_sql('orders', self.engine, if_exists='append', index=False, method=None, chunksize=1000)
         
         logger.success(f"✓ {len(df)} órdenes cargadas exitosamente")
         return len(df)
@@ -135,7 +134,7 @@ class CSVToOLTPLoader:
         """Cargar datos de items de órdenes"""
         logger.info("Cargando datos de items de órdenes...")
         
-        file_path = self.data_path / self.config['source_files']['order_items']
+        file_path = self.data_path / "olist_order_items_dataset.csv"
         df = pd.read_csv(file_path, encoding='utf-8')
         
         # Convertir fecha
@@ -143,30 +142,30 @@ class CSVToOLTPLoader:
         
         logger.info(f"Registros encontrados: {len(df)}")
         
-        df.to_sql('order_items', self.engine, if_exists='append', index=False, method='multi', chunksize=1000)
+        df.to_sql('order_items', self.engine, if_exists='append', index=False, method=None, chunksize=1000)
         
         logger.success(f"✓ {len(df)} items de órdenes cargados exitosamente")
         return len(df)
     
     def load_order_payments(self):
-        """Cargar datos de pagos"""
+        """Cargar datos de pagos de órdenes"""
         logger.info("Cargando datos de pagos...")
         
-        file_path = self.data_path / self.config['source_files']['order_payments']
+        file_path = self.data_path / "olist_order_payments_dataset.csv"
         df = pd.read_csv(file_path, encoding='utf-8')
         
         logger.info(f"Registros encontrados: {len(df)}")
         
-        df.to_sql('order_payments', self.engine, if_exists='append', index=False, method='multi', chunksize=1000)
+        df.to_sql('order_payments', self.engine, if_exists='append', index=False, method=None, chunksize=1000)
         
         logger.success(f"✓ {len(df)} pagos cargados exitosamente")
         return len(df)
     
     def load_order_reviews(self):
-        """Cargar datos de reviews"""
-        logger.info("Cargando datos de reviews...")
+        """Cargar datos de reseñas de órdenes"""
+        logger.info("Cargando datos de reseñas...")
         
-        file_path = self.data_path / self.config['source_files']['order_reviews']
+        file_path = self.data_path / "olist_order_reviews_dataset.csv"
         df = pd.read_csv(file_path, encoding='utf-8')
         
         # Convertir fechas
@@ -183,36 +182,71 @@ class CSVToOLTPLoader:
         if duplicates_removed > 0:
             logger.warning(f"Se eliminaron {duplicates_removed} reviews duplicadas")
         
-        df.to_sql('order_reviews', self.engine, if_exists='append', index=False, method='multi', chunksize=1000)
+        df.to_sql('order_reviews', self.engine, if_exists='append', index=False, method=None, chunksize=1000)
         
         logger.success(f"✓ {len(df)} reviews cargadas exitosamente")
         return len(df)
     
     def load_geolocation(self):
-        """Cargar datos de geolocalización"""
-        logger.info("Cargando datos de geolocalización...")
+        """Cargar datos de geolocalización con PostgreSQL COPY (optimizado para 1M+ registros)"""
+        # VERSIÓN REESCRITA - USA COPY NO PANDAS
+        logger.info("Cargando datos de geolocalización con método COPY...")
         
-        file_path = self.data_path / self.config['source_files']['geolocation']
-        df = pd.read_csv(file_path, encoding='utf-8')
+        file_path = self.data_path / "olist_geolocation_dataset.csv"
+        import csv
+        from datetime import datetime
+        from io import StringIO
         
-        logger.info(f"Registros encontrados: {len(df)}")
+        # Leer CSV y preparar para COPY con timestamp
+        timestamp = datetime.now().isoformat()
+        buffer = StringIO()
+        writer = csv.writer(buffer)
         
-        # Cargar en chunks debido al tamaño
-        df.to_sql('geolocation', self.engine, if_exists='append', index=False, method='multi', chunksize=5000)
+        with open(file_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            count = 0
+            for row in reader:
+                # Escribir solo las columnas que existen en la tabla OLTP
+                writer.writerow([
+                    row['geolocation_zip_code_prefix'],
+                    row['geolocation_lat'],
+                    row['geolocation_lng'],
+                    row['geolocation_city'],
+                    row['geolocation_state'],
+                    timestamp
+                ])
+                count += 1
         
-        logger.success(f"✓ {len(df)} registros de geolocalización cargados")
-        return len(df)
+        buffer.seek(0)
+        logger.info(f"Registros encontrados: {count}")
+        
+        # Usar COPY de PostgreSQL (mucho más rápido que INSERT)
+        conn = self.engine.raw_connection()
+        try:
+            cur = conn.cursor()
+            cur.copy_expert(
+                "COPY geolocation (geolocation_zip_code_prefix, geolocation_lat, geolocation_lng, "
+                "geolocation_city, geolocation_state, created_at) FROM STDIN WITH CSV",
+                buffer
+            )
+            conn.commit()
+            cur.close()
+        finally:
+            conn.close()
+        
+        logger.success(f"✓ {count} registros de geolocalización cargados")
+        return count
     
     def load_product_translation(self):
         """Cargar traducción de categorías de productos"""
         logger.info("Cargando traducción de categorías...")
         
-        file_path = self.data_path / self.config['source_files']['product_translation']
+        file_path = self.data_path / "product_category_name_translation.csv"
         df = pd.read_csv(file_path, encoding='utf-8')
         
         logger.info(f"Registros encontrados: {len(df)}")
         
-        df.to_sql('product_category_translation', self.engine, if_exists='append', index=False, method='multi')
+        df.to_sql('product_category_translation', self.engine, if_exists='append', index=False, method=None)
         
         logger.success(f"✓ {len(df)} traducciones cargadas exitosamente")
         return len(df)
