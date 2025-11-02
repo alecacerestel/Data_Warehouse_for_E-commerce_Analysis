@@ -1,0 +1,2 @@
+# Directorio para almacenar archivos Parquet del Data Lake local
+# Los archivos .parquet se generan automaticamente desde la base de datos OLTP

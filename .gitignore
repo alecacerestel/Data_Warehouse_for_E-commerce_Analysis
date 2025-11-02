@@ -17,11 +17,13 @@ ENV/
 logs/
 *.log
 
-# Data files - Excluir todos los archivos CSV
+# Data files - Excluir todos los archivos CSV y Parquet
 data/raw/*.csv
+data/staging/*.parquet
 
 # Keep directory structure
 !data/raw/.gitkeep
+!data/staging/.gitkeep
 
 # Environment variables
 .env

@@ -1,8 +1,15 @@
-# Pipeline de Extracción - Olist E-commerce Dataset
+# Pipeline ETL - Olist E-commerce Dataset
 
-## Descripción del Proyecto
+## Descripcion del Proyecto
 
-Este proyecto implementa un pipeline de extracción para cargar datos CSV del e-commerce brasileño Olist a una base de datos PostgreSQL (OLTP).
+Este proyecto implementa un pipeline ETL completo para procesar datos del e-commerce brasileno Olist:
+
+- Fase 1: Extraccion - Carga datos CSV a PostgreSQL OLTP
+- Fase 2: Staging - Extrae datos OLTP a Data Lake local en formato Parquet
+- Fase 3: Transformacion - XXXXX
+- Fase 4: Data Warehouse - YYYYY
+- Fase 5: Analisis - ZZZZZ
+
 
 ##  Fuente de Datos
 
@@ -15,25 +22,42 @@ El dataset incluye información de aproximadamente 100,000 órdenes realizadas e
 ## Arquitectura del Pipeline
 
 ```
-CSV Files  PostgreSQL (OLTP)
+CSV Files -> PostgreSQL (OLTP) -> Data Lake Parquet (Staging)
 ```
+
+## Fases Implementadas
+
+### Fase 1: Extraccion
+- Lee 9 archivos CSV
+- Carga datos a PostgreSQL OLTP
+- Total: 1.6M registros
+
+### Fase 2: Staging
+- Extrae datos desde OLTP
+- Guarda en formato Parquet comprimido
+- Tamano total: ~54 MB
 
 ## Estructura del Proyecto
 
 ```
-Análisis de E-commerce/
+Analisis de E-commerce/
  config/
-    config.yaml              # Configuración general
-    db_config.py             # Configuración de base de datos
+    config.yaml              # Configuracion general
+    db_config.py             # Configuracion de base de datos
  data/
-    raw/                     # CSVs originales (9 archivos)
+    raw/                     # CSVs originales 
+    staging/                 # Archivos Parquet 
  scripts/
     01_extract/
         load_csv_to_oltp.py  # Carga CSVs a PostgreSQL
+    02_staging/
+        load_to_staging.py   # Carga OLTP a Parquet
  sql/
-    oltp_schema.sql          # Schema OLTP (9 tablas)
- logs/                        # Logs de ejecución
+    oltp_schema.sql          # Schema OLTP 
+ logs/                        # Logs de ejecucion
  requirements.txt
+ truncate_all.py              # Limpia tablas OLTP
+ verify_staging.py            # Verifica archivos Parquet
  README.md
 ```
 
@@ -41,17 +65,17 @@ Análisis de E-commerce/
 
 El pipeline carga 9 tablas a PostgreSQL:
 
-1. **customers** - Clientes (99,441 registros)
-2. **products** - Productos (32,951 registros)
-3. **sellers** - Vendedores (3,095 registros)
-4. **orders** - Órdenes (99,441 registros)
-5. **order_items** - Items de orden (112,650 registros)
-6. **order_payments** - Pagos (103,886 registros)
-7. **order_reviews** - Reseñas (98,410 registros)
-8. **geolocation** - Geolocalización (1,000,163 registros)
-9. **product_category_name_translation** - Traducciones (71 registros)
+1. **customers** - Clientes 
+2. **products** - Productos 
+3. **sellers** - Vendedores
+4. **orders** - Órdenes 
+5. **order_items** - Items de orden 
+6. **order_payments** - Pagos 
+7. **order_reviews** - Reseñas 
+8. **geolocation** - Geolocalización 
+9. **product_category_name_translation** - Traducciones al Ingles
 
-## Instalaci�n y Configuraci�n
+## Instalación y Configuración
 
 ### 1. Descargar Dataset
 
@@ -91,42 +115,71 @@ Ejecutar el script SQL para crear las tablas:
 psql -U postgres -d olist_oltp -f sql/oltp_schema.sql
 ```
 
-## Ejecuci�n del Pipeline
+## Ejecucion del Pipeline
 
 ### Ejecutar pipeline completo
 
 ```bash
+python truncate_all.py
 python run_pipeline.py
 ```
 
-El pipeline ejecutará:
-1. Carga de 9 archivos CSV a PostgreSQL
-2. Total de ~1.6 millones de registros
-3. Tiempo estimado: 78 segundos
+El pipeline ejecutara:
+1. Fase 1 - Extraccion: Carga 9 archivos CSV a PostgreSQL OLTP 
+2. Fase 2 - Staging: Extrae OLTP a Data Lake Parquet 
+3. Fase 3 - Transformacion: XXX
+4. Total de ~1.6 millones de registros
 
-## Tecnologías Utilizadas
+### Verificar Data Lake
+
+```bash
+python verify_staging.py
+```
+
+Muestra informacion detallada de los archivos Parquet generados
+
+## Tecnologias Utilizadas
 
 - **Lenguaje**: Python 3.12
 - **Base de Datos**: PostgreSQL 18
-- **Librerías principales**:
-  - pandas - Manipulación de datos
+- **Librerias principales**:
+  - pandas - Manipulacion de datos
   - SQLAlchemy - ORM y conexiones
   - psycopg2 - Driver PostgreSQL
   - loguru - Logging
-  - pyarrow - Lectura eficiente de CSV
-- **Formato de datos**: CSV
+  - pyarrow - Lectura/escritura de Parquet
+- **Formatos de datos**: CSV, Parquet
 
-## Notas Técnicas
+## Notas Tecnicas
 
-- La tabla `geolocation` es la más grande (1M+ registros) y usa PostgreSQL COPY para carga optimizada
-- Coordenadas geográficas almacenadas con precisión DECIMAL(11,8)
-- Todas las tablas incluyen campos de auditoría (`created_at`, `updated_at`)
-- Los logs se guardan en la carpeta `logs/` para debugging
+### Fase 1 - Extraccion
+- La tabla geolocation es la mas grande (1M+ registros) y usa PostgreSQL COPY para carga optimizada
+- Coordenadas geograficas almacenadas con precision DECIMAL(11,8)
+- Todas las tablas incluyen campos de auditoria (created_at, updated_at)
 
-## Próximos Pasos
+### Fase 2 - Staging
+- Formato Parquet con compresion Snappy
+- Reduccion de tamano: ~75% vs CSV original
+- Archivos columnar para lectura eficiente
+- Data Lake local en data/staging/
 
-Este pipeline sirve como base para:
-- Análisis exploratorio de datos con Jupyter notebooks
-- Construcción de dashboards con herramientas BI
-- Desarrollo de modelos de Machine Learning
-- Implementación de un Data Warehouse (futuro)
+### Fase 3: Transformacion (Pendiente)
+- Limpieza y calidad de datos
+- Creacion de dimensiones (customers, products, sellers, date)
+- Creacion de tabla de hechos (orders)
+
+### Fase 4: Data Warehouse (Pendiente)
+- Carga a base de datos OLAP
+- Modelo estrella optimizado
+- Indices y particionamiento
+
+### Fase 5: Analisis (Pendiente)
+- Queries de negocio
+- Dashboard con visualizaciones
+- Metricas y KPIs
+
+### Logs
+- Todos los logs se guardan en logs/ para debugging
+- logs/01_load_csv_to_oltp.log - Fase extraccion
+- logs/02_load_to_staging.log - Fase staging
+- logs/main_pipeline.log - Pipeline completo
