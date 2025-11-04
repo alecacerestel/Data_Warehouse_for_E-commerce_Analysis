@@ -2,13 +2,18 @@
 
 ## Descripcion del Proyecto
 
-Este proyecto implementa un pipeline ETL completo para procesar datos del e-commerce brasileno Olist:
+Este proyecto implementa un pipeline ETL completo para procesar y analizar datos del e-commerce brasileno Olist. El sistema procesa mas de 1.5 millones de registros a traves de multiples fases de transformacion, culminando en un modelo estrella optimizado para analisis de negocio.
 
-- Fase 1: Extraccion - Carga datos CSV a PostgreSQL OLTP
-- Fase 2: Staging - Extrae datos OLTP a Data Lake local en formato Parquet
-- Fase 3: Transformacion - XXXXX
-- Fase 4: Data Warehouse - YYYYY
-- Fase 5: Analisis - ZZZZZ
+### Fases Implementadas
+
+- **Fase 1: Extraccion** - Carga datos CSV a PostgreSQL OLTP (1.6M registros)
+- **Fase 2: Staging** - Extrae datos OLTP a Data Lake local en formato Parquet (53 MB)
+- **Fase 3: Transformacion** - Crea modelo estrella con 4 dimensiones y tabla de hechos
+
+### Fases Futuras
+
+- **Fase 4: Data Warehouse** - Carga a base de datos OLAP con optimizaciones
+- **Fase 5: Analisis** - Queries de negocio, dashboards y KPIs
 
 
 ##  Fuente de Datos
@@ -22,43 +27,74 @@ El dataset incluye información de aproximadamente 100,000 órdenes realizadas e
 ## Arquitectura del Pipeline
 
 ```
-CSV Files -> PostgreSQL (OLTP) -> Data Lake Parquet (Staging)
+CSV Files (Raw) 
+    ↓
+PostgreSQL OLTP (1.6M registros)
+    ↓
+Data Lake Parquet (Staging - 53 MB)
+    ↓
+Modelo Estrella (Transformed)
+    ├── dim_customers (99K)
+    ├── dim_products (33K)
+    ├── dim_sellers (3K)
+    ├── dim_date (774)
+    └── fct_orders (99K)
 ```
-
-## Fases Implementadas
+## Detalle de Fases
 
 ### Fase 1: Extraccion
-- Lee 9 archivos CSV
-- Carga datos a PostgreSQL OLTP
-- Total: 1.6M registros
+- Lee 9 archivos CSV desde data/raw/
+- Carga datos a PostgreSQL OLTP con validaciones
+- Optimizacion especial para geolocation (1M+ registros) usando PostgreSQL COPY
+- Total: 1,550,108 registros en ~99 segundos
 
 ### Fase 2: Staging
-- Extrae datos desde OLTP
-- Guarda en formato Parquet comprimido
-- Tamano total: ~54 MB
+- Extrae todas las tablas desde OLTP
+- Guarda en formato Parquet con compresion Snappy
+- Reduccion de tamano: 75 por ciento vs CSV original
+- Total: 53.51 MB en ~21 segundos
+
+### Fase 3: Transformacion
+- **Limpieza de datos**: Eliminacion de duplicados, manejo de nulos, normalizacion
+- **Dimensiones creadas**:
+  - dim_customers: 99,441 clientes con clasificacion regional
+  - dim_products: 32,951 productos con categorias traducidas y clasificacion de tamano
+  - dim_sellers: 3,095 vendedores con clasificacion regional
+  - dim_date: 774 fechas con atributos de calendario completo
+- **Tabla de hechos**: 
+  - fct_orders: 99,441 ordenes con 19 metricas de negocio
+  - Incluye: valores, tiempos de entrega, retrasos, scores de reviews
+- Total: 235,361 registros en ~17 segundos
 
 ## Estructura del Proyecto
 
 ```
 Analisis de E-commerce/
- config/
-    config.yaml              # Configuracion general
-    db_config.py             # Configuracion de base de datos
- data/
-    raw/                     # CSVs originales 
-    staging/                 # Archivos Parquet 
- scripts/
-    01_extract/
-        load_csv_to_oltp.py  # Carga CSVs a PostgreSQL
-    02_staging/
-        load_to_staging.py   # Carga OLTP a Parquet
- sql/
-    oltp_schema.sql          # Schema OLTP 
- logs/                        # Logs de ejecucion
- requirements.txt
- truncate_all.py              # Limpia tablas OLTP
- verify_staging.py            # Verifica archivos Parquet
- README.md
+├── config/
+│   ├── config.yaml              # Configuracion general
+│   └── db_config.py             # Configuracion de base de datos
+├── data/
+│   ├── raw/                     # CSVs originales (9 archivos)
+│   ├── staging/                 # Archivos Parquet (53 MB)
+│   └── transformed/             # Modelo estrella (4 dims + 1 fact)
+├── scripts/
+│   ├── 01_extract/
+│   │   └── load_csv_to_oltp.py  # Carga CSVs a PostgreSQL
+│   ├── 02_staging/
+│   │   └── load_to_staging.py   # Extrae OLTP a Parquet
+│   └── 03_transform/
+│       ├── data_cleaning.py     # Limpieza y validacion de datos
+│       ├── create_dimensions.py # Creacion de dimensiones
+│       └── create_fact_table.py # Creacion de tabla de hechos
+├── sql/
+│   └── oltp_schema.sql          # Schema de base de datos OLTP
+├── logs/                         # Logs de ejecucion de todas las fases
+├── requirements.txt              # Dependencias Python
+├── run_pipeline.py               # Script principal del pipeline
+├── truncate_all.py               # Limpia tablas OLTP
+├── verify_staging.py             # Verifica archivos Parquet
+├── verify_transformed.py         # Verifica modelo estrella
+└── README.md
 ```
 
 ## Tablas en Base de Datos OLTP
@@ -117,26 +153,51 @@ psql -U postgres -d olist_oltp -f sql/oltp_schema.sql
 
 ## Ejecucion del Pipeline
 
-### Ejecutar pipeline completo
+### Pipeline Completo (3 Fases)
+
+Ejecuta todas las fases del pipeline en secuencia:
 
 ```bash
-python truncate_all.py
-python run_pipeline.py
+python truncate_all.py  # Limpia base de datos OLTP
+python run_pipeline.py  # Ejecuta las 3 fases
 ```
 
 El pipeline ejecutara:
-1. Fase 1 - Extraccion: Carga 9 archivos CSV a PostgreSQL OLTP 
-2. Fase 2 - Staging: Extrae OLTP a Data Lake Parquet 
-3. Fase 3 - Transformacion: XXX
-4. Total de ~1.6 millones de registros
+1. **Fase 1 - Extraccion**: Carga 9 archivos CSV a PostgreSQL OLTP (1.6M registros)
+2. **Fase 2 - Staging**: Extrae OLTP a Data Lake Parquet (53 MB)
+3. **Fase 3 - Transformacion**: Crea modelo estrella con dimensiones y tabla de hechos
 
-### Verificar Data Lake
+**Tiempo total**: Aproximadamente 2-3 minutos
+
+### Ejecucion Parcial
+
+Para ejecutar solo algunas fases, modifica los parametros en `run_pipeline.py`:
+
+```python
+run_pipeline(run_staging=True, run_transformation=True)
+```
+
+### Herramientas de Verificacion
+
+**Verificar archivos Parquet del Data Lake:**
 
 ```bash
 python verify_staging.py
 ```
 
-Muestra informacion detallada de los archivos Parquet generados
+Muestra informacion detallada de cada archivo Parquet del Data Lake: registros, columnas, tamano y muestra de datos.
+
+**Verificar modelo estrella:**
+
+```bash
+python verify_transformed.py
+```
+
+Muestra estadisticas completas del modelo estrella:
+- Resumen de cada dimension (registros, columnas, muestra)
+- Estadisticas de la tabla de hechos
+- Metricas de negocio: valores, tiempos de entrega, reviews, retrasos
+- Distribucion por estado de orden y tipo de pago
 
 ## Tecnologias Utilizadas
 
@@ -144,7 +205,7 @@ Muestra informacion detallada de los archivos Parquet generados
 - **Base de Datos**: PostgreSQL 18
 - **Librerias principales**:
   - pandas - Manipulacion de datos
-  - SQLAlchemy - ORM y conexiones
+  - SQL - ORM y conexiones
   - psycopg2 - Driver PostgreSQL
   - loguru - Logging
   - pyarrow - Lectura/escritura de Parquet
@@ -163,23 +224,19 @@ Muestra informacion detallada de los archivos Parquet generados
 - Archivos columnar para lectura eficiente
 - Data Lake local en data/staging/
 
-### Fase 3: Transformacion (Pendiente)
-- Limpieza y calidad de datos
-- Creacion de dimensiones (customers, products, sellers, date)
-- Creacion de tabla de hechos (orders)
+### Fase 3: Transformacion
+- Eliminacion de duplicados por claves naturales
+- Manejo de valores nulos con estrategias especificas
+- Conversion de tipos de datos (fechas, numericos)
+- Normalizacion de campos de texto (estados, ciudades)
+- Validacion de rangos y valores permitidos
 
 ### Fase 4: Data Warehouse (Pendiente)
-- Carga a base de datos OLAP
-- Modelo estrella optimizado
-- Indices y particionamiento
+- Carga de modelo estrella a base de datos OLAP
+- Optimizaciones: indices, particionamiento, vistas materializadas
+- Estrategia para dimensiones de cambio lento (SCD)
 
 ### Fase 5: Analisis (Pendiente)
-- Queries de negocio
-- Dashboard con visualizaciones
-- Metricas y KPIs
-
-### Logs
-- Todos los logs se guardan en logs/ para debugging
-- logs/01_load_csv_to_oltp.log - Fase extraccion
-- logs/02_load_to_staging.log - Fase staging
-- logs/main_pipeline.log - Pipeline completo
+- Queries de negocio y metricas clave
+- Dashboard interactivo con visualizaciones
+- KPIs: conversion, retention, LTV, churn

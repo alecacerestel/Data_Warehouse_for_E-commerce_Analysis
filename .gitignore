@@ -20,10 +20,12 @@ logs/
 # Data files - Excluir todos los archivos CSV y Parquet
 data/raw/*.csv
 data/staging/*.parquet
+data/transformed/*.parquet
 
 # Keep directory structure
 !data/raw/.gitkeep
 !data/staging/.gitkeep
+!data/transformed/.gitkeep
 
 # Environment variables
 .env

@@ -2,6 +2,7 @@
 Script principal para ejecutar el pipeline ETL
 Fase 1: Extraccion - Carga datos CSV a la base de datos OLTP
 Fase 2: Staging - Extrae datos OLTP a Data Lake en formato Parquet
+Fase 3: Transformacion - Crea modelo estrella con dimensiones y tabla de hechos
 """
 import sys
 from pathlib import Path
@@ -28,12 +29,13 @@ def load_module(module_path, module_name):
     return module
 
 
-def run_pipeline(run_staging=True):
+def run_pipeline(run_staging=True, run_transformation=True):
     """
     Ejecuta el pipeline ETL completo
     
     Args:
         run_staging: Si True, ejecuta tambien la fase de staging
+        run_transformation: Si True, ejecuta tambien la fase de transformacion
     """
     
     logger.info("="*80)
@@ -68,6 +70,50 @@ def run_pipeline(run_staging=True):
             staging_loader.load_all_to_staging()
             logger.success("Staging completado")
         
+        # FASE 3: TRANSFORMACION (OPCIONAL)
+        if run_transformation and run_staging:
+            logger.info("\n" + "="*80)
+            logger.info("TRANSFORMACION - Crear modelo estrella (dimensiones y tabla de hechos)")
+            logger.info("="*80)
+            
+            # Crear directorio para datos transformados
+            transformed_path = PROJECT_ROOT / "data" / "transformed"
+            transformed_path.mkdir(exist_ok=True)
+            
+            # Agregar directorio de transformacion al sys.path
+            transform_dir = PROJECT_ROOT / "scripts" / "03_transform"
+            sys.path.insert(0, str(transform_dir))
+            
+            transform_module = load_module(
+                transform_dir / "create_fact_table.py",
+                "create_fact_table"
+            )
+            builder = transform_module.FactTableBuilder()
+            
+            # Crear dimensiones
+            logger.info("Creando dimensiones...")
+            dim_customers = builder.dim_builder.create_dim_customers()
+            dim_products = builder.dim_builder.create_dim_products()
+            dim_sellers = builder.dim_builder.create_dim_sellers()
+            dim_date = builder.dim_builder.create_dim_date()
+            
+            # Guardar dimensiones
+            dim_customers.to_parquet(transformed_path / "dim_customers.parquet", compression='snappy')
+            dim_products.to_parquet(transformed_path / "dim_products.parquet", compression='snappy')
+            dim_sellers.to_parquet(transformed_path / "dim_sellers.parquet", compression='snappy')
+            dim_date.to_parquet(transformed_path / "dim_date.parquet", compression='snappy')
+            logger.success(f"Dimensiones guardadas en {transformed_path}")
+            
+            # Crear tabla de hechos
+            logger.info("Creando tabla de hechos...")
+            fct_orders = builder.create_fact_orders()
+            fct_orders.to_parquet(transformed_path / "fct_orders.parquet", compression='snappy')
+            logger.success(f"Tabla de hechos guardada en {transformed_path}")
+            
+            logger.success("Transformacion completada")
+        elif run_transformation and not run_staging:
+            logger.warning("Transformacion requiere staging. Se omite Fase 3.")
+        
         # RESUMEN FINAL
         end_time = time.time()
         duration = end_time - start_time
@@ -80,12 +126,20 @@ def run_pipeline(run_staging=True):
         logger.info("  1. Extraccion: CSV -> PostgreSQL OLTP")
         if run_staging:
             logger.info("  2. Staging: OLTP -> Data Lake Parquet")
+        if run_transformation and run_staging:
+            logger.info("  3. Transformacion: Staging -> Modelo Estrella")
         logger.info("\nBase de datos OLTP:")
         logger.info("  - PostgreSQL: olist_oltp")
         if run_staging:
             logger.info("\nData Lake:")
             logger.info("  - Formato: Parquet")
             logger.info("  - Ubicacion: data/staging/")
+        if run_transformation and run_staging:
+            logger.info("\nModelo Estrella:")
+            logger.info("  - Formato: Parquet")
+            logger.info("  - Ubicacion: data/transformed/")
+            logger.info("  - Dimensiones: dim_customers, dim_products, dim_sellers, dim_date")
+            logger.info("  - Tabla de hechos: fct_orders")
         logger.info("\nTablas procesadas:")
         logger.info("  - customers (clientes)")
         logger.info("  - products (productos)")
