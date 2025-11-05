@@ -9,10 +9,10 @@ Este proyecto implementa un pipeline ETL completo para procesar y analizar datos
 - **Fase 1: Extraccion** - Carga datos CSV a PostgreSQL OLTP (1.6M registros)
 - **Fase 2: Staging** - Extrae datos OLTP a Data Lake local en formato Parquet (53 MB)
 - **Fase 3: Transformacion** - Crea modelo estrella con 4 dimensiones y tabla de hechos
+- **Fase 4: Data Warehouse** - Carga modelo estrella a PostgreSQL OLAP con optimizaciones
 
 ### Fases Futuras
 
-- **Fase 4: Data Warehouse** - Carga a base de datos OLAP con optimizaciones
 - **Fase 5: Analisis** - Queries de negocio, dashboards y KPIs
 
 
@@ -39,6 +39,11 @@ Modelo Estrella (Transformed)
     ├── dim_sellers (3K)
     ├── dim_date (774)
     └── fct_orders (99K)
+        ↓
+PostgreSQL OLAP (Data Warehouse - 236K registros)
+    ├── Indices optimizados
+    ├── Claves foraneas
+    └── Vistas materializadas (8 vistas)
 ```
 ## Detalle de Fases
 
@@ -46,13 +51,13 @@ Modelo Estrella (Transformed)
 - Lee 9 archivos CSV desde data/raw/
 - Carga datos a PostgreSQL OLTP con validaciones
 - Optimizacion especial para geolocation (1M+ registros) usando PostgreSQL COPY
-- Total: 1,550,108 registros en ~99 segundos
+- Total: 1,550,108 registros
 
 ### Fase 2: Staging
 - Extrae todas las tablas desde OLTP
 - Guarda en formato Parquet con compresion Snappy
 - Reduccion de tamano: 75 por ciento vs CSV original
-- Total: 53.51 MB en ~21 segundos
+- Total: 53.51 MB
 
 ### Fase 3: Transformacion
 - **Limpieza de datos**: Eliminacion de duplicados, manejo de nulos, normalizacion
@@ -64,7 +69,27 @@ Modelo Estrella (Transformed)
 - **Tabla de hechos**: 
   - fct_orders: 99,441 ordenes con 19 metricas de negocio
   - Incluye: valores, tiempos de entrega, retrasos, scores de reviews
-- Total: 235,361 registros en ~17 segundos
+- Total: 235,361 registro
+
+### Fase 4: Data Warehouse
+- **Carga a PostgreSQL OLAP**: Todas las dimensiones y tabla de hechos
+- **Optimizaciones implementadas**:
+  - Indices en claves primarias y foraneas
+  - Indices compuestos para queries frecuentes
+  - Claves foraneas con verificacion de integridad referencial
+  - Triggers para auditoria automatica (updated_at)
+  - ANALYZE y VACUUM para estadisticas optimizadas
+- **Vistas materializadas** (8 vistas para metricas de negocio):
+  - mv_sales_by_month: Metricas mensuales de ventas
+  - mv_sales_by_region: Analisis por region geografica
+  - mv_top_products: Top 1000 productos por ingresos
+  - mv_seller_performance: Desempeno de vendedores
+  - mv_delivery_analysis: Analisis de entregas y retrasos
+  - mv_payment_analysis: Metodos de pago y cuotas
+  - mv_product_categories: Metricas por categoria
+  - mv_customer_recurrence: Segmentacion de clientes
+  - mv_executive_dashboard: KPIs principales
+- Total: 235,702 registros 
 
 ## Estructura del Proyecto
 
@@ -79,21 +104,26 @@ Analisis de E-commerce/
 │   └── transformed/             # Modelo estrella (4 dims + 1 fact)
 ├── scripts/
 │   ├── 01_extract/
-│   │   └── load_csv_to_oltp.py  # Carga CSVs a PostgreSQL
-│   ├── 02_staging/
-│   │   └── load_to_staging.py   # Extrae OLTP a Parquet
-│   └── 03_transform/
-│       ├── data_cleaning.py     # Limpieza y validacion de datos
-│       ├── create_dimensions.py # Creacion de dimensiones
-│       └── create_fact_table.py # Creacion de tabla de hechos
+│   │   └── load_to_postgres.py  # Carga CSV a PostgreSQL OLTP
+│   ├── 02_stage/
+│   │   └── export_to_parquet.py # Exporta desde OLTP a Parquet
+│   ├── 03_transform/
+│   │   ├── data_cleaning.py     # Limpieza y validacion de datos
+│   │   ├── create_dimensions.py # Creacion de tablas dimensionales
+│   │   └── create_fact_table.py # Creacion de tabla de hechos
+│   └── 04_load/
+│       └── load_to_dwh.py       # Carga modelo estrella a PostgreSQL OLAP
 ├── sql/
-│   └── oltp_schema.sql          # Schema de base de datos OLTP
+│   ├── oltp_schema.sql          # Schema de base de datos OLTP
+│   ├── olap_schema.sql          # Schema de Data Warehouse OLAP
+│   └── olap_views.sql           # Vistas materializadas OLAP
 ├── logs/                         # Logs de ejecucion de todas las fases
 ├── requirements.txt              # Dependencias Python
-├── run_pipeline.py               # Script principal del pipeline
-├── truncate_all.py               # Limpia tablas OLTP
-├── verify_staging.py             # Verifica archivos Parquet
-├── verify_transformed.py         # Verifica modelo estrella
+├── run_pipeline.py               # Script principal del pipeline (4 fases)
+├── truncate_all.py               # Limpieza de tablas y archivos
+├── verify_staging.py             # Verificacion de archivos Parquet staging
+├── verify_transformed.py         # Verificacion de archivos Parquet transformados
+├── verify_dwh.py                 # Verificacion de Data Warehouse OLAP
 └── README.md
 ```
 
@@ -141,40 +171,55 @@ POSTGRES_PORT=5432
 POSTGRES_USER=tu_usuario
 POSTGRES_PASSWORD=tu_password
 OLTP_DB=olist_oltp
+OLAP_DB=olist_olap
 ```
 
-### 5. Crear Schema
+### 5. Crear Bases de Datos y Schemas
 
-Ejecutar el script SQL para crear las tablas:
+Crear bases de datos OLTP y OLAP, y aplicar schemas:
 
 ```bash
+psql -U postgres -c "CREATE DATABASE olist_oltp;"
 psql -U postgres -d olist_oltp -f sql/oltp_schema.sql
+
+psql -U postgres -c "CREATE DATABASE olist_olap;"
+psql -U postgres -d olist_olap -f sql/olap_schema.sql
+```
+
+Opcional: Aplicar vistas materializadas para metricas precalculadas (recomendado):
+
+```bash
+psql -U postgres -d olist_olap -f sql/olap_views.sql
 ```
 
 ## Ejecucion del Pipeline
 
-### Pipeline Completo (3 Fases)
+### Pipeline Completo (4 Fases)
 
 Ejecuta todas las fases del pipeline en secuencia:
 
 ```bash
-python truncate_all.py  # Limpia base de datos OLTP
-python run_pipeline.py  # Ejecuta las 3 fases
+python truncate_all.py  # Limpia bases de datos OLTP y OLAP
+python run_pipeline.py  # Ejecuta las 4 fases
 ```
 
 El pipeline ejecutara:
 1. **Fase 1 - Extraccion**: Carga 9 archivos CSV a PostgreSQL OLTP (1.6M registros)
 2. **Fase 2 - Staging**: Extrae OLTP a Data Lake Parquet (53 MB)
-3. **Fase 3 - Transformacion**: Crea modelo estrella con dimensiones y tabla de hechos
+3. **Fase 3 - Transformacion**: Crea modelo estrella con dimensiones y tabla de hechos (235K registros)
+4. **Fase 4 - Data Warehouse**: Carga modelo estrella a PostgreSQL OLAP con optimizaciones
 
-**Tiempo total**: Aproximadamente 2-3 minutos
 
 ### Ejecucion Parcial
 
 Para ejecutar solo algunas fases, modifica los parametros en `run_pipeline.py`:
 
 ```python
-run_pipeline(run_staging=True, run_transformation=True)
+# Ejecutar solo fases 1-3 (sin Data Warehouse)
+run_pipeline(run_staging=True, run_transformation=True, run_dwh_load=False)
+
+# Ejecutar solo fases 2-4 (sin extraccion)
+run_pipeline(run_staging=True, run_transformation=True, run_dwh_load=True)
 ```
 
 ### Herramientas de Verificacion
@@ -187,17 +232,26 @@ python verify_staging.py
 
 Muestra informacion detallada de cada archivo Parquet del Data Lake: registros, columnas, tamano y muestra de datos.
 
-**Verificar modelo estrella:**
+**Verificar modelo estrella transformado:**
 
 ```bash
 python verify_transformed.py
 ```
 
 Muestra estadisticas completas del modelo estrella:
-- Resumen de cada dimension (registros, columnas, muestra)
-- Estadisticas de la tabla de hechos
-- Metricas de negocio: valores, tiempos de entrega, reviews, retrasos
-- Distribucion por estado de orden y tipo de pago
+
+**Verificar Data Warehouse OLAP:**
+
+```bash
+python verify_dwh.py
+```
+
+Muestra metricas completas del Data Warehouse:
+- Conteos de registros en dimensiones y tabla de hechos
+- Metricas de negocio: ordenes totales, ingresos, valor promedio, tiempo de entrega
+- Distribucion por estado de orden, categorias, regiones geograficas
+- Validacion de integridad referencial (claves foraneas)
+- Lista de vistas materializadas disponibles
 
 ## Tecnologias Utilizadas
 
@@ -231,7 +285,31 @@ Muestra estadisticas completas del modelo estrella:
 - Normalizacion de campos de texto (estados, ciudades)
 - Validacion de rangos y valores permitidos
 
-### Fase 4: Data Warehouse (Pendiente)
+### Fase 4: Data Warehouse
+- Modelo estrella con 5 tablas: 4 dimensiones y 1 tabla de hechos
+- Optimizaciones implementadas:
+  - Indices en claves primarias (PRIMARY KEY)
+  - Indices en claves foraneas para joins eficientes
+  - Indices compuestos para queries frecuentes (fecha+estado, cliente+fecha, producto+fecha)
+  - Claves foraneas con ON DELETE CASCADE
+  - Triggers para actualizacion automatica de updated_at
+  - ANALYZE y VACUUM para estadisticas optimizadas del query planner
+- Validacion de integridad referencial en cada carga
+- 8 vistas materializadas para metricas de negocio precalculadas
+- Carga en chunks optimizada: 5000 para dimensiones, 1000 para hechos
+
+### Vistas Materializadas OLAP
+Las vistas materializadas precalculan metricas complejas para consultas rapidas:
+- mv_sales_by_month: Ventas mensuales con metricas agregadas
+- mv_sales_by_region: Desempeno por region geografica
+- mv_top_products: Top 1000 productos por ingresos
+- mv_seller_performance: Metricas de desempeno por vendedor
+- mv_delivery_analysis: Analisis de tiempos de entrega y retrasos
+- mv_payment_analysis: Distribucion de metodos de pago y cuotas
+- mv_product_categories: Agregaciones por categoria de producto
+- mv_customer_recurrence: Segmentacion de clientes por frecuencia de compra
+
+Refrescar vistas: `SELECT refresh_all_materialized_views();`
 - Carga de modelo estrella a base de datos OLAP
 - Optimizaciones: indices, particionamiento, vistas materializadas
 - Estrategia para dimensiones de cambio lento (SCD)

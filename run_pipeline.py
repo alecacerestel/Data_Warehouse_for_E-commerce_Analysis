@@ -3,6 +3,7 @@ Script principal para ejecutar el pipeline ETL
 Fase 1: Extraccion - Carga datos CSV a la base de datos OLTP
 Fase 2: Staging - Extrae datos OLTP a Data Lake en formato Parquet
 Fase 3: Transformacion - Crea modelo estrella con dimensiones y tabla de hechos
+Fase 4: Data Warehouse - Carga modelo estrella a base de datos OLAP
 """
 import sys
 from pathlib import Path
@@ -29,13 +30,14 @@ def load_module(module_path, module_name):
     return module
 
 
-def run_pipeline(run_staging=True, run_transformation=True):
+def run_pipeline(run_staging=True, run_transformation=True, run_dwh_load=True):
     """
     Ejecuta el pipeline ETL completo
     
     Args:
         run_staging: Si True, ejecuta tambien la fase de staging
         run_transformation: Si True, ejecuta tambien la fase de transformacion
+        run_dwh_load: Si True, ejecuta tambien la carga a Data Warehouse OLAP
     """
     
     logger.info("="*80)
@@ -114,6 +116,26 @@ def run_pipeline(run_staging=True, run_transformation=True):
         elif run_transformation and not run_staging:
             logger.warning("Transformacion requiere staging. Se omite Fase 3.")
         
+        # FASE 4: DATA WAREHOUSE (OPCIONAL)
+        if run_dwh_load and run_transformation and run_staging:
+            logger.info("\n" + "="*80)
+            logger.info("DATA WAREHOUSE - Cargar modelo estrella a base de datos OLAP")
+            logger.info("="*80)
+            
+            dwh_module = load_module(
+                PROJECT_ROOT / "scripts" / "04_load" / "load_to_dwh.py",
+                "load_to_dwh"
+            )
+            dwh_loader = dwh_module.DWHLoader()
+            
+            if dwh_loader.load_all():
+                logger.success("Data Warehouse cargado correctamente")
+            else:
+                logger.error("Error al cargar Data Warehouse")
+                
+        elif run_dwh_load and (not run_transformation or not run_staging):
+            logger.warning("Carga a DWH requiere staging y transformacion. Se omite Fase 4.")
+        
         # RESUMEN FINAL
         end_time = time.time()
         duration = end_time - start_time
@@ -128,6 +150,8 @@ def run_pipeline(run_staging=True, run_transformation=True):
             logger.info("  2. Staging: OLTP -> Data Lake Parquet")
         if run_transformation and run_staging:
             logger.info("  3. Transformacion: Staging -> Modelo Estrella")
+        if run_dwh_load and run_transformation and run_staging:
+            logger.info("  4. Data Warehouse: Modelo Estrella -> PostgreSQL OLAP")
         logger.info("\nBase de datos OLTP:")
         logger.info("  - PostgreSQL: olist_oltp")
         if run_staging:
@@ -140,6 +164,12 @@ def run_pipeline(run_staging=True, run_transformation=True):
             logger.info("  - Ubicacion: data/transformed/")
             logger.info("  - Dimensiones: dim_customers, dim_products, dim_sellers, dim_date")
             logger.info("  - Tabla de hechos: fct_orders")
+        if run_dwh_load and run_transformation and run_staging:
+            logger.info("\nData Warehouse OLAP:")
+            logger.info("  - PostgreSQL: olist_olap")
+            logger.info("  - Tablas: 4 dimensiones + 1 tabla de hechos")
+            logger.info("  - Indices: Optimizados para consultas analiticas")
+            logger.info("  - Vistas materializadas: 8 vistas con metricas de negocio")
         logger.info("\nTablas procesadas:")
         logger.info("  - customers (clientes)")
         logger.info("  - products (productos)")
